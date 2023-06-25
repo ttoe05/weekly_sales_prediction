@@ -9,10 +9,12 @@ import pandas as pd
 import numpy as np
 import logging
 import sys
+from utils import persist_df
 from pathlib import Path
 from datetime import datetime
 
 
+FILE_PATH = "data/data_processor"
 def init_logger() -> None:
     """Initialize logging, creating necessary folder if it doesn't already exist"""
     # Assume script is called from top-level directory
@@ -62,9 +64,8 @@ def merge_sales_cal(df_sales: pd.DataFrame,
         states = ["CA", "TX", "WI"]
         for state in states:
             df_state = df_merged[df_merged["state_id"] == state]
-            file_nm = f"data/sales_calendar_{state}_{datetime.today()}"
-            logging.info(f"Persisting {state} as file:\t{file_nm}")
-            df_state.to_csv(file_nm)
+            file_nm = f"sales_calendar_{state}"
+            persist_df(df=df_state, file_path=FILE_PATH, name=file_nm)
         logging.info(f"Successfully persisted the states.")
     return df_merged
 
@@ -100,10 +101,8 @@ def merge_sales_cal_cleaner(df: pd.DataFrame,
         states = ["CA", "TX", "WI"]
         for state in states:
             df_state = df[df["state_id"] == state]
-            logging.info(f"{state} shape of dataframe after cleaning:\t{df_state.shape}")
-            file_nm = f"data/merged_salescal_{state}_{datetime.today()}"
-            logging.info(f"Persisting {state} as file:\t{file_nm}")
-            df_state.to_csv(file_nm)
+            file_nm = f"merged_salescal_{state}"
+            persist_df(df=df_state, file_path=FILE_PATH, name=file_nm)
 
 
 def merge_sales_transform(df: pd.DataFrame,
@@ -142,9 +141,9 @@ def merge_sales_transform(df: pd.DataFrame,
         states = ["CA", "TX", "WI"]
         for state in states:
             df_state = df_grouped[df_grouped["state_id"] == state]
-            file_nm = f"data/transform_salescal_{state}_{datetime.today()}"
-            logging.info(f"Persisting {state} as file:\t{file_nm}")
-            df_state.to_csv(file_nm)
+            file_nm = f"transform_salescal_{state}"
+            persist_df(df=df_state, file_path=FILE_PATH, name=file_nm)
+
     return df_grouped
 
 
@@ -162,9 +161,8 @@ def merge_prices(df_x: pd.DataFrame,
         for state in states:
             df_state = df_merged[df_merged["state_id"] == state]
             logging.info(f"{state} shape of dataframe after cleaning:\t{df_state.shape}")
-            file_nm = f"data/merged_salescal_price_validation_{state}_{datetime.today()}"
-            logging.info(f"Persisting {state} as file:\t{file_nm}")
-            df_state.to_csv(file_nm)
+            file_nm = f"merged_salescal_price_training_{state}"
+            persist_df(df=df_state, file_path=FILE_PATH, name=file_nm)
     return df_merged
 
 
@@ -174,8 +172,8 @@ if __name__ == "__main__":
 
     init_logger()
     states = ["CA", "TX", "WI"]
-    df_cal = pd.read_csv("data/m5-forecasting-accuracy/calendar.csv")
-    df_sales = pd.read_csv("data/m5-forecasting-accuracy/sales_train_evaluation.csv")
+    df_cal = pd.read_csv("data/original/calendar.csv")
+    df_sales = pd.read_csv("data/original/sales_train_evaluation.csv")
     # clean the sales data
     df_sales_clean = sales_clean(df_sales=df_sales)
     # merge the sales data with the calendar meta data
@@ -186,7 +184,7 @@ if __name__ == "__main__":
     merge_sales_cal_cleaner(df_merged, persist=False)
     df_transform = merge_sales_transform(df_merged, persist=False)
     # get the prices data
-    df_prices = pd.read_csv("data/m5-forecasting-accuracy/sell_prices.csv")
+    df_prices = pd.read_csv("data/original/sell_prices.csv")
     cols = ['store_id', 'item_id', 'wm_yr_wk']
     df_merged_prices = merge_prices(df_transform, df_prices, on=cols, persist=True)
     # print(df_merged_prices.head(100))

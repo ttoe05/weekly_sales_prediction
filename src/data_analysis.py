@@ -7,6 +7,7 @@ import numpy as np
 import statsmodels.api as sm
 from pathlib import Path
 from datetime import datetime
+from utils import persist_df
 import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import seasonal_decompose
 from scipy import stats
@@ -16,9 +17,9 @@ from statsmodels.tsa.stattools import adfuller
 Run eda on the data and produce statistical output and plots
 """
 
-CAL_FILE = "data/merged_salescal_price_CA_2023-05-08 14:56:20.991359"
-TX_FILE = "data/transform_salescal_TX_2023-05-03 17:11:02.609918"
-WIS_FILE = "data/transform_salescal_WI_2023-05-03 17:11:19.599778"
+CAL_FILE = "data/data_processor/merged_salescal_price_training_CA_2023-06-22T18:34:18.958283.csv"
+TX_FILE = "data/data_processor/merged_salescal_price_training_TX_2023-06-22T18:34:31.591892.csv"
+WIS_FILE = "data/data_processor/merged_salescal_price_training_WI_2023-06-22T18:34:41.119958.csv"
 
 def init_logger() -> None:
     """Initialize logging, creating necessary folder if it doesn't already exist"""
@@ -48,7 +49,7 @@ def create_plots_dir() -> None:
 
 # get general statistical stats on columns
 
-def get_stats_numerical(df:pd.DataFrame,
+def get_stats_numerical(df: pd.DataFrame,
                         state: str="CA") -> None:
     """
     get statistical stats for any numerical columns in the dataframe
@@ -63,6 +64,7 @@ def get_stats_numerical(df:pd.DataFrame,
         median_val = df[col].median()
         max_val = df[col].max()
         min_val = df[col].min()
+        standard_dv = df[col].std()
         try:
             std_val = df[col].values.std(ddof=1)
         except Exception as e:
@@ -71,7 +73,7 @@ def get_stats_numerical(df:pd.DataFrame,
             f"\nStats for {col} - {state}:\n"
             "#############################\n"
             f"Mean Value:\t{mean_val}\nMin Value:\t{min_val}\nMax Value:\t{max_val}\nStandard Deviation:\t{std_val}\n"
-            f'Median Value:\t{median_val}'
+            f'Median Value:\t{median_val}\nStandard dev:\t{standard_dv}'
         )
         logging.info(stats_msg)
 
@@ -101,7 +103,7 @@ def get_numerical_plots(df:pd.DataFrame,
     """
     generate plots for the numerical data
     df: pd.DataFrame
-        Dataframe
+        DataFrame
     by: list or string
         group by values aggregate would be sum of sales
     """
@@ -324,9 +326,12 @@ def save_stationairty(df:pd.DataFrame,
     group_list = []
     adf_statistic_list = []
     p_value_list = []
+    critical_val_1 = []
+    critical_val_2 = []
+    critical_val_3 = []
     for group, group_df in df.groupby(by):
         logging.info(f"Getting the ADF results for sales_sum by {group}")
-        group_list.append(group[-1])
+        group_list.append(list(group))
         group_df = group_df.groupby(by="date_max").aggregate({"sales_sum": "sum"})
         group_df.reset_index(inplace=True)
         group_df.columns = ["date_max", "sales_sum"]
@@ -338,15 +343,24 @@ def save_stationairty(df:pd.DataFrame,
         logging.info('p-value: %f' % result[1])
         p_value_list.append(result[1])
         logging.info('Critical Values:')
-        for key, value in result[4].items():
-            logging.info('\t%s: %.3f' % (key, value))
+        critical_val_1.append(result[4]["1%"])
+        critical_val_2.append(result[4]["5%"])
+        critical_val_3.append(result[4]["10%"])
     # create the dataframe
-    df_results = pd.DataFrame
-    df_results["group"] = group_list
+    df_results = pd.DataFrame()
+    df_results[by] = group_list
     df_results["adf_statistic"] = adf_statistic_list
     df_results["pvalue"] = p_value_list
+    df_results["critical_val_1"] = critical_val_1
+    df_results["critical_val_5"] = critical_val_2
+    df_results["critical_val_10"] = critical_val_3
     # create the stationary indicator
-    df_results["stationarity"] = np.where(df_results < 0.05, 1, 0)
+    df_results["stationarity"] = np.where(df_results["pvalue"] < 0.05, 1, 0)
+    if persist:
+        file_path = "data/stationarity"
+        file_name = f"stationaity_res"
+        persist_df(df=df_results, file_path=file_path, name=file_name)
+    return df_results
 
 
 if __name__ == "__main__":
@@ -375,13 +389,19 @@ if __name__ == "__main__":
         # # create the correlation plots
         # get_correlations(df=df_state, state=file_state[1], by=groupby2)
         # # run the kruskal wallace test
-        run_kruskal(df=df_state, state=file_state[1])
+        # run_kruskal(df=df_state, state=file_state[1])
         # # get the autocorrelation plots
         # get_autocorr(df=df_state, by=groupby2, state=file_state[1])
         # # get the decompose of the data
         # get_decompose(df=df_state, state=file_state[1], by=groupby2)
         # # test for stationarity
         # test_stationarity(df=df_state, state=file_state[1], by=groupby2)
+        # get the id columns
+        id_cols = [x for x in df_state.columns if "_id" in x]
+        logging.info(f"saving stationairty reusults based on {id_cols}")
+        save_stationairty(df=df_state,
+                          by=id_cols,
+                          persist=True)
 
 
 
